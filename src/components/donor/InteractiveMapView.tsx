@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BloodGroup, Language, Donor } from '../../types';
 import { getTranslation } from '../../utils/translations';
+import { 
+  requestRealDeviceGPS, 
+  calculateHaversineDistance, 
+  formatDistance, 
+  DISTRICT_COORDINATES,
+  Coordinates,
+  DEFAULT_BANGLADESH_COORDS 
+} from '../../utils/geolocation';
 import { 
   MapPin, 
   Hospital, 
@@ -231,6 +239,16 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
   onOpenSOSWizard,
   onStartChatWithDonor,
 }) => {
+  const [userCoords, setUserCoords] = useState<Coordinates>(DEFAULT_BANGLADESH_COORDS);
+  const [isGpsActive, setIsGpsActive] = useState<boolean>(false);
+
+  useEffect(() => {
+    requestRealDeviceGPS().then((coords) => {
+      setUserCoords(coords);
+      setIsGpsActive(true);
+    });
+  }, []);
+
   const [selectedLoc, setSelectedLoc] = useState<MapLocation>(LOCATIONS[0]);
   const [filterType, setFilterType] = useState<'ALL' | 'DONOR' | 'SOS' | 'HOSPITAL'>('ALL');
   const [selectedBloodGroup, setSelectedBloodGroup] = useState<string>('ALL');
@@ -239,7 +257,19 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
 
-  const filteredLocations = LOCATIONS.filter((l) => {
+  // Compute live distances from user's actual GPS coordinates
+  const computedLocations = React.useMemo(() => {
+    return LOCATIONS.map((loc) => {
+      const targetCoord = DISTRICT_COORDINATES[loc.division] || DEFAULT_BANGLADESH_COORDS;
+      const km = calculateHaversineDistance(userCoords, targetCoord);
+      return {
+        ...loc,
+        computedDistance: km > 0 ? formatDistance(km, lang) : loc.distance,
+      };
+    });
+  }, [userCoords, lang]);
+
+  const filteredLocations = computedLocations.filter((l) => {
     if (filterType === 'SOS' && l.type !== 'SOS') return false;
     if (filterType === 'HOSPITAL' && l.type !== 'HOSPITAL') return false;
     if (filterType === 'DONOR' && l.type !== 'DONOR') return false;
@@ -469,7 +499,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
 
                   {/* Pin Tooltip */}
                   <div className="absolute top-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-white bg-slate-900/90 px-2 py-0.5 rounded shadow pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-40">
-                    {loc.name.split(' ')[0]} ({loc.distance})
+                    {loc.name.split(' ')[0]} ({(loc as any).computedDistance || loc.distance})
                   </div>
                 </div>
               );
@@ -515,7 +545,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
                       <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                       <span className="truncate">{selectedLoc.district}</span>
                       <span>·</span>
-                      <strong className="text-emerald-400 font-mono">{selectedLoc.distance} দূরে</strong>
+                      <strong className="text-emerald-400 font-mono">{(selectedLoc as any).computedDistance || selectedLoc.distance} দূরে</strong>
                     </div>
                   </div>
                 </div>

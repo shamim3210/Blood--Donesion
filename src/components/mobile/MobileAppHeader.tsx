@@ -20,7 +20,8 @@ import {
   Activity,
   Sparkles,
   PhoneCall,
-  Lock
+  Lock,
+  Download
 } from 'lucide-react';
 import { PrivacyPolicyModal } from '../ecosystem/PrivacyPolicyModal';
 
@@ -33,9 +34,11 @@ interface MobileAppHeaderProps {
   setDarkMode: (val: boolean) => void;
   onOpenSOSModal: () => void;
   onOpenAuthModal: () => void;
+  onOpenRegisterModal: (role?: 'USER' | 'ADMIN') => void;
   onOpenFamilyModal: () => void;
   onOpenArchitectureModal: () => void;
   onOpenSlideDeck: () => void;
+  onOpenPlayStoreModal?: () => void;
 }
 
 export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
@@ -47,9 +50,11 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
   setDarkMode,
   onOpenSOSModal,
   onOpenAuthModal,
+  onOpenRegisterModal,
   onOpenFamilyModal,
   onOpenArchitectureModal,
   onOpenSlideDeck,
+  onOpenPlayStoreModal,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
@@ -136,44 +141,56 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
         )}
 
         {/* Action Buttons on Right */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
+          {/* Direct APK / App Install Button */}
+          {onOpenPlayStoreModal && (
+            <button
+              onClick={onOpenPlayStoreModal}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-black text-emerald-400 border border-slate-700 font-bold text-[11px] shadow-xs transition-all cursor-pointer whitespace-nowrap"
+              title="APK ডাউনলোড ও অ্যাপ ইনস্টল"
+            >
+              <Download className="w-3 h-3" />
+              <span>APK</span>
+            </button>
+          )}
+
+          {/* Direct ID Registration Button */}
+          <button
+            onClick={() => onOpenRegisterModal('USER')}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs transition-all cursor-pointer whitespace-nowrap"
+            title="নতুন আইডি রেজিস্ট্রেশন (User / Admin)"
+          >
+            <span>🆔 {lang === 'bn' ? 'আইডি' : 'ID'}</span>
+          </button>
+
+          {/* Direct Admin Panel Button */}
+          <button
+            onClick={() => setActiveTab('admin')}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-xl font-bold text-[11px] shadow-xs transition-all cursor-pointer whitespace-nowrap border ${
+              activeTab === 'admin'
+                ? 'bg-amber-600 text-white border-amber-500'
+                : 'bg-slate-900 dark:bg-slate-800 text-amber-300 border-slate-700'
+            }`}
+            title="অ্যাডমিন প্যানেল"
+          >
+            <Lock className="w-3 h-3 text-amber-400" />
+            <span>{lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}</span>
+          </button>
+
           {/* Prominent Login Button */}
           <button
             onClick={onOpenAuthModal}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer whitespace-nowrap"
-            title="লগইন / ওটিপি অ্যাকাউন্ট"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] shadow-xs transition-all cursor-pointer whitespace-nowrap"
+            title="রিয়েল লগইন / Gmail / OTP"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>{lang === 'bn' ? 'লগইন' : 'Login'}</span>
           </button>
 
-          {/* Search Quick Tab */}
-          <button
-            onClick={() => setActiveTab('search')}
-            title="Search Donors"
-            className={`p-2 rounded-xl transition-colors cursor-pointer ${
-              activeTab === 'search'
-                ? 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400'
-                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Search className="w-4 h-4" />
-          </button>
-
-          {/* Quick Notification / Chat Tab */}
-          <button
-            onClick={() => setActiveTab('chat')}
-            title="Chat & Messages"
-            className="p-2 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative cursor-pointer"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
-          </button>
-
           {/* Mobile Drawer Menu Button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-[#1e293b] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-750 transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl bg-slate-100 dark:bg-[#1e293b] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-750 transition-colors cursor-pointer"
             title="App Menu & Settings"
           >
             {isMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
@@ -233,6 +250,28 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
           <div className="grid grid-cols-2 gap-2 text-xs font-bold">
             <button
               onClick={() => {
+                onOpenRegisterModal('USER');
+                setIsMenuOpen(false);
+              }}
+              className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-left text-slate-900 dark:text-white flex items-center gap-2 cursor-pointer"
+            >
+              <span>👤</span>
+              <span>{lang === 'bn' ? 'ইউজার আইডি তৈরি' : 'User Panel ID'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onOpenRegisterModal('ADMIN');
+                setIsMenuOpen(false);
+              }}
+              className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-400 dark:border-amber-800 text-left text-slate-900 dark:text-white flex items-center gap-2 cursor-pointer"
+            >
+              <span>🛡️</span>
+              <span>{lang === 'bn' ? 'অ্যাডমিন আইডি তৈরি' : 'Admin Panel ID'}</span>
+            </button>
+
+            <button
+              onClick={() => {
                 setActiveTab('search');
                 setIsMenuOpen(false);
               }}
@@ -244,35 +283,13 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
 
             <button
               onClick={() => {
-                setActiveTab('map');
-                setIsMenuOpen(false);
-              }}
-              className="p-3 rounded-xl bg-slate-100 dark:bg-[#1e293b] border border-slate-300 dark:border-slate-700 text-left text-slate-900 dark:text-white flex items-center gap-2 cursor-pointer hover:border-blue-400"
-            >
-              <Activity className="w-4 h-4 text-blue-600" />
-              <span>{lang === 'bn' ? 'হাসপাতাল ম্যাপ' : 'Hospital Map'}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                onOpenFamilyModal();
-                setIsMenuOpen(false);
-              }}
-              className="p-3 rounded-xl bg-slate-100 dark:bg-[#1e293b] border border-slate-300 dark:border-slate-700 text-left text-slate-900 dark:text-white flex items-center gap-2 cursor-pointer hover:border-emerald-400"
-            >
-              <Users className="w-4 h-4 text-emerald-600" />
-              <span>{lang === 'bn' ? 'ফ্যামিলি ও ভলান্টিয়ার' : 'Volunteers'}</span>
-            </button>
-
-            <button
-              onClick={() => {
                 onOpenAuthModal();
                 setIsMenuOpen(false);
               }}
               className="p-3 rounded-xl bg-slate-100 dark:bg-[#1e293b] border border-slate-300 dark:border-slate-700 text-left text-slate-900 dark:text-white flex items-center gap-2 cursor-pointer hover:border-indigo-400"
             >
               <ShieldCheck className="w-4 h-4 text-indigo-600" />
-              <span>{lang === 'bn' ? 'অ্যাকাউন্ট সিকিউরিটি' : 'Auth & OTP'}</span>
+              <span>{lang === 'bn' ? 'রিয়েল লগইন / OTP' : 'Real Login / OTP'}</span>
             </button>
 
             <button
@@ -284,12 +301,32 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
             >
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-amber-400" />
-                <span className="font-black text-xs">{lang === 'bn' ? 'অ্যাডমিন প্যানেল (মাস্টার পিন আবশ্যক)' : 'Admin Panel (PIN Protected)'}</span>
+                <span className="font-black text-xs">{lang === 'bn' ? 'অ্যাডমিন প্যানেল ড্যাশবোর্ড' : 'Admin Panel Dashboard'}</span>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-mono font-bold">
-                ROOT PIN
+              <span className="text-[10px] font-mono font-bold text-amber-300">
+                OWNER GATE
               </span>
             </button>
+
+            {onOpenPlayStoreModal && (
+              <button
+                onClick={() => {
+                  onOpenPlayStoreModal();
+                  setIsMenuOpen(false);
+                }}
+                className="col-span-2 p-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-left flex items-center justify-between cursor-pointer shadow-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <Download className="w-4 h-4 text-white" />
+                  <span className="font-black text-xs">
+                    {lang === 'bn'
+                      ? '📲 ফোনে APK ইনস্টল ও অ্যান্টি-হ্যাক প্রোটেকশন গাইড'
+                      : '📲 Install APK & Anti-Hijack Security Hub'}
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono font-bold text-emerald-100">APK READY</span>
+              </button>
+            )}
           </div>
 
           {/* Action Row */}

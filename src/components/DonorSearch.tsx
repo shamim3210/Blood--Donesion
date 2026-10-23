@@ -3,6 +3,7 @@ import { Donor, BloodGroup, Language } from '../types';
 import { DIVISIONS, DISTRICTS } from '../data/bangladeshGeo';
 import { ALL_BLOOD_GROUPS, getCompatibleDonors } from '../data/compatibility';
 import { getTranslation } from '../utils/translations';
+import { buildWhatsAppChatUrl } from '../firebase';
 import { 
   Search, 
   MapPin, 
@@ -17,7 +18,9 @@ import {
   RotateCcw,
   UserCheck,
   MessageSquare,
-  UserPlus
+  UserPlus,
+  Mic,
+  MicOff
 } from 'lucide-react';
 
 interface DonorSearchProps {
@@ -29,7 +32,7 @@ interface DonorSearchProps {
   onOpenRegister?: () => void;
 }
 
-export const DonorSearch: React.FC<DonorSearchProps> = ({
+const DonorSearchComponent: React.FC<DonorSearchProps> = ({
   donors,
   lang,
   onRevealPhone,
@@ -47,6 +50,67 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [onlyAvailable, setOnlyAvailable] = useState<boolean>(false);
   const [onlyVerified, setOnlyVerified] = useState<boolean>(false);
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+
+  const handleToggleVoice = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceNotice(
+        lang === 'bn'
+          ? 'আপনার ব্রাউজারে ভয়েস সার্চ সমর্থন করে না। গুগল ক্রোম ব্যবহার করুন অথবা লিখে সার্চ করুন।'
+          : 'Voice search is not supported in this browser. Please type your search or use Chrome.'
+      );
+      setTimeout(() => setVoiceNotice(null), 4000);
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = lang === 'bn' ? 'bn-BD' : 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setSearchQuery(transcript);
+          const lower = transcript.toLowerCase();
+          if (lower.includes('b+') || lower.includes('বি পজিটিভ')) setSelectedGroup('B+');
+          else if (lower.includes('o+') || lower.includes('ও পজিটিভ')) setSelectedGroup('O+');
+          else if (lower.includes('a+') || lower.includes('এ পজিটিভ')) setSelectedGroup('A+');
+          else if (lower.includes('ab+') || lower.includes('এবি পজিটিভ')) setSelectedGroup('AB+');
+          else if (lower.includes('o-') || lower.includes('ও নেগেটিভ')) setSelectedGroup('O-');
+          else if (lower.includes('b-') || lower.includes('বি নেগেটিভ')) setSelectedGroup('B-');
+          else if (lower.includes('a-') || lower.includes('এ নেগেটিভ')) setSelectedGroup('A-');
+          else if (lower.includes('ab-') || lower.includes('এবি নেগেটিভ')) setSelectedGroup('AB-');
+        }
+        setIsListening(false);
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (e) {
+      setIsListening(false);
+    }
+  };
 
   // Available districts filtered by selected division
   const availableDistricts = useMemo(() => {
@@ -248,7 +312,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
         </div>
 
         {/* Geographic & Filter Row */}
-        <div className="pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div className="pt-3 grid grid-cols-1 @md:grid-cols-2 gap-2.5">
           {/* Division Dropdown */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
@@ -316,12 +380,31 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
               <Search className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
               <input
                 type="text"
-                placeholder={t.searchPlaceholder}
+                placeholder={isListening ? (lang === 'bn' ? '🎙️ শুনছি... মুখে বলুন (যেমন: বি পজিটিভ ঢাকা)' : '🎙️ Listening... Speak now') : t.searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-11 pl-9 pr-3 text-xs sm:text-sm rounded-xl bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-white placeholder:text-slate-400 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                className={`w-full h-11 pl-9 pr-11 text-xs sm:text-sm rounded-xl bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-white placeholder:text-slate-400 border transition-all focus:outline-none focus:ring-2 focus:ring-rose-500 ${
+                  isListening ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-50/50 dark:bg-rose-950/20' : 'border-slate-300 dark:border-slate-700'
+                }`}
               />
+              <button
+                type="button"
+                onClick={handleToggleVoice}
+                className={`absolute right-2 top-2 p-1.5 rounded-lg transition-all cursor-pointer ${
+                  isListening
+                    ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-600/40'
+                    : 'text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+                title={lang === 'bn' ? 'ভয়েস সার্চ (মুখে বলুন)' : 'Voice Search (Speech to Text)'}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
             </div>
+            {voiceNotice && (
+              <p className="mt-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                {voiceNotice}
+              </p>
+            )}
           </div>
         </div>
 
@@ -382,7 +465,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3.5">
+        <div className="grid grid-cols-1 @xl:grid-cols-2 gap-3.5">
           {filteredDonors.map((donor) => {
             const districtObj = DISTRICTS.find((d) => d.id === donor.district);
             const districtName = districtObj ? (lang === 'bn' ? districtObj.nameBn : districtObj.nameEn) : donor.district;
@@ -484,23 +567,35 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
                     <span className="text-[11px] text-slate-400 font-medium">🔒 {lang === 'bn' ? 'এনক্রিপ্টেড ও সুরক্ষিত' : 'Encrypted'}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {onStartChatWithDonor && (
                       <button
                         onClick={() => onStartChatWithDonor(donor)}
-                        className="w-full min-h-[42px] px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border border-slate-300 dark:border-slate-700 shadow-xs"
-                        title="চ্যাট করুন"
+                        className="w-full min-h-[42px] px-2.5 py-2 text-xs font-bold rounded-xl bg-[#075e54] hover:bg-[#064e46] text-white transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                        title="অ্যাপে লাইভ চ্যাট করুন"
                       >
-                        <MessageSquare className="w-4 h-4 text-rose-500 shrink-0" />
-                        <span>{lang === 'bn' ? 'চ্যাট' : 'Chat'}</span>
+                        <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{lang === 'bn' ? 'লাইভ চ্যাট' : 'Live Chat'}</span>
                       </button>
                     )}
+                    <a
+                      href={buildWhatsAppChatUrl(
+                        donor.whatsappPhone || donor.phone,
+                        `আসসালামু আলাইকুম ${donor.name}, জরুরি রক্তের (${donor.bloodGroup}) প্রয়োজনে BloodSearch থেকে নক দিচ্ছি।`
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full min-h-[42px] px-2.5 py-2 text-xs font-bold rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] text-white transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                      title="সরাসরি WhatsApp-এ চ্যাট"
+                    >
+                      <span className="truncate">WhatsApp</span>
+                    </a>
                     <button
                       onClick={() => onRevealPhone(donor)}
-                      className="w-full min-h-[42px] px-3 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white transition-all shadow-md shadow-rose-600/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      className="w-full min-h-[42px] px-2.5 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <Phone className="w-4 h-4 shrink-0" />
-                      <span>{t.callDonor}</span>
+                      <Phone className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{t.callDonor}</span>
                     </button>
                   </div>
                 </div>
@@ -512,3 +607,6 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
     </div>
   );
 };
+
+export const DonorSearch = React.memo(DonorSearchComponent);
+

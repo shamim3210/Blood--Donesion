@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BloodRequest, Language } from '../types';
-import { Flame, AlertCircle, ArrowRight, UserCheck } from 'lucide-react';
+import { Flame, AlertCircle, ArrowRight, UserCheck, Volume2, VolumeX } from 'lucide-react';
+import { playCriticalSiren } from '../utils/audioAlert';
 
 interface EmergencyBannerProps {
   urgentRequests: BloodRequest[];
@@ -15,9 +16,20 @@ export const EmergencyBanner: React.FC<EmergencyBannerProps> = ({
   onSelectRequest,
   onQuickRespond,
 }) => {
+  const [isPlayingSiren, setIsPlayingSiren] = useState(false);
+
   if (urgentRequests.length === 0) return null;
 
   const topRequest = urgentRequests[0];
+
+  const handleTriggerSiren = () => {
+    setIsPlayingSiren(true);
+    const stopFn = playCriticalSiren();
+    setTimeout(() => {
+      stopFn();
+      setIsPlayingSiren(false);
+    }, 2000);
+  };
 
   return (
     <div className="w-full bg-gradient-to-r from-rose-600/90 via-rose-700/90 to-red-600/90 text-white shadow-md">
@@ -42,6 +54,16 @@ export const EmergencyBanner: React.FC<EmergencyBannerProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleTriggerSiren}
+            className={`p-1.5 rounded-lg border border-white/30 text-white transition-all cursor-pointer ${
+              isPlayingSiren ? 'bg-amber-500 animate-bounce' : 'bg-black/20 hover:bg-black/30'
+            }`}
+            title="জরুরি সাইরেন অ্যালার্ম ও ভাইব্রেশন"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={() => onQuickRespond(topRequest)}
             className="flex items-center gap-1.5 px-3 py-1 bg-white text-rose-700 hover:bg-rose-50 font-bold rounded-md shadow-sm transition-transform active:scale-95 cursor-pointer text-xs"

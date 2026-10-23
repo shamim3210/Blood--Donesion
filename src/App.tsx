@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   ActiveTab, 
   Language, 
@@ -34,6 +34,11 @@ import { AdminPortal } from './components/portals/AdminPortal';
 import { ArchitectureDocModal } from './components/ecosystem/ArchitectureDocModal';
 import { AuthModuleModal } from './components/auth/AuthModuleModal';
 import { FamilyVolunteerModal } from './components/ecosystem/FamilyVolunteerModal';
+import { EmergencyDirectoryModal } from './components/ecosystem/EmergencyDirectoryModal';
+import { EmergencyPosterModal } from './components/ecosystem/EmergencyPosterModal';
+import { ThalassemiaManagerModal } from './components/ecosystem/ThalassemiaManagerModal';
+import { PlayStoreGuideModal } from './components/ecosystem/PlayStoreGuideModal';
+import { PwaInstallPrompt } from './components/ecosystem/PwaInstallPrompt';
 import { PdfExactShowcase } from './components/showcase/PdfExactShowcase';
 import { 
   Smartphone, 
@@ -50,8 +55,24 @@ import {
   ChevronRight,
   Maximize2,
   Lock,
-  ShieldAlert
+  ShieldAlert,
+  UserPlus,
+  LogOut,
+  Download
 } from 'lucide-react';
+import {
+  auth,
+  onAuthStateChanged,
+  completeRealGmailSignInIfPresent,
+  fetchUserProfileFromFirestore,
+  checkIsVerifiedAdminInFirestore,
+  subscribePublicDonors,
+  subscribePublicRequests,
+  createBloodRequestInFirestore,
+  pledgeBloodRequestUnitInFirestore,
+  signOutReal,
+  User as FirebaseUser,
+} from './firebase';
 
 export default function App() {
   // Theme state: Normal solid light or normal solid dark (NO glass, NO blur)
@@ -146,9 +167,72 @@ export default function App() {
   const [isPhoneModalOpen, setIsPhoneModalOpen] = useState<boolean>(false);
   const [isSOSWizardOpen, setIsSOSWizardOpen] = useState<boolean>(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState<boolean>(false);
+  const [registerInitialRole, setRegisterInitialRole] = useState<'USER' | 'ADMIN'>('USER');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isFamilyModalOpen, setIsFamilyModalOpen] = useState<boolean>(false);
+  const [isDirectoryModalOpen, setIsDirectoryModalOpen] = useState<boolean>(false);
+  const [isPosterModalOpen, setIsPosterModalOpen] = useState<boolean>(false);
+  const [isThalassemiaModalOpen, setIsThalassemiaModalOpen] = useState<boolean>(false);
+  const [isPlayStoreModalOpen, setIsPlayStoreModalOpen] = useState<boolean>(false);
   const [isArchitectureModalOpen, setIsArchitectureModalOpen] = useState<boolean>(false);
+
+  const openRegisterWithRole = useCallback((role: 'USER' | 'ADMIN' = 'USER') => {
+    setRegisterInitialRole(role);
+    setIsRegisterModalOpen(true);
+  }, []);
+
+  const [liveFirebaseUser, setLiveFirebaseUser] = useState<FirebaseUser | null>(auth.currentUser);
+
+  // Real Firebase Auth & Cloud Firestore Live Listeners
+  useEffect(() => {
+    completeRealGmailSignInIfPresent().catch(() => {});
+
+    const unsubAuth = onAuthStateChanged(auth, async (u) => {
+      setLiveFirebaseUser(u);
+      if (u) {
+        try {
+          const profile = await fetchUserProfileFromFirestore(u.uid);
+          const isAdmin = await checkIsVerifiedAdminInFirestore(u);
+          if (profile) {
+            if (isAdmin) {
+              profile.role = 'ADMIN';
+            }
+            localStorage.setItem('bloodsearch_current_user', JSON.stringify(profile));
+            window.dispatchEvent(new Event('bloodsearch_user_changed'));
+          }
+        } catch {}
+      }
+    });
+
+    let unsubDonors: (() => void) | null = null;
+    let unsubRequests: (() => void) | null = null;
+    try {
+      unsubDonors = subscribePublicDonors((cloudDonors) => {
+        if (cloudDonors.length > 0) {
+          setDonors((prev) => {
+            const cloudIds = new Set(cloudDonors.map((d) => d.id));
+            const remaining = prev.filter((p) => !cloudIds.has(p.id));
+            return [...cloudDonors, ...remaining];
+          });
+        }
+      });
+      unsubRequests = subscribePublicRequests((cloudReqs) => {
+        if (cloudReqs.length > 0) {
+          setRequests((prev) => {
+            const cloudIds = new Set(cloudReqs.map((r) => r.id));
+            const remaining = prev.filter((p) => !cloudIds.has(p.id));
+            return [...cloudReqs, ...remaining];
+          });
+        }
+      });
+    } catch {}
+
+    return () => {
+      unsubAuth();
+      if (unsubDonors) unsubDonors();
+      if (unsubRequests) unsubRequests();
+    };
+  }, []);
 
   // Apply dark mode class to <html>
   useEffect(() => {
@@ -165,23 +249,38 @@ export default function App() {
     localStorage.setItem('bloodsearch_lang', lang);
   }, [lang]);
 
-  // Persist donors & requests
+  // Debounced persistence to localStorage so large arrays/avatars NEVER block UI frames
   useEffect(() => {
-    localStorage.setItem('bloodsearch_donors', JSON.stringify(donors));
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem('bloodsearch_donors', JSON.stringify(donors));
+      } catch {}
+    }, 450);
+    return () => window.clearTimeout(timer);
   }, [donors]);
 
   useEffect(() => {
-    localStorage.setItem('bloodsearch_requests', JSON.stringify(requests));
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem('bloodsearch_requests', JSON.stringify(requests));
+      } catch {}
+    }, 450);
+    return () => window.clearTimeout(timer);
   }, [requests]);
 
   useEffect(() => {
-    localStorage.setItem('bloodsearch_audit_logs', JSON.stringify(auditLogs));
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem('bloodsearch_audit_logs', JSON.stringify(auditLogs));
+      } catch {}
+    }, 450);
+    return () => window.clearTimeout(timer);
   }, [auditLogs]);
 
   const t = getTranslation(lang);
 
   // Audit Logger helper
-  const addAuditLog = (action: any, targetDetails: string) => {
+  const addAuditLog = useCallback((action: any, targetDetails: string) => {
     const newLog: AuditLogEntry = {
       id: `audit-${Date.now()}`,
       action,
@@ -191,17 +290,18 @@ export default function App() {
       securityHash: `sha256:${Math.random().toString(36).substring(2, 10)}...${Math.random().toString(36).substring(2, 6)}`,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
-  };
+  }, []);
 
   // Phone Reveal Action
-  const handleRevealPhone = (donor: Donor) => {
+  const handleRevealPhone = useCallback((donor: Donor) => {
     setSelectedDonorForPhone(donor);
     setIsPhoneModalOpen(true);
-  };
+  }, []);
 
   // SOS Creation Action
   const handleSubmitSOS = (newRequest: BloodRequest) => {
     setRequests((prev) => [newRequest, ...prev]);
+    createBloodRequestInFirestore(newRequest).catch(() => {});
     setActiveTab('requests');
   };
 
@@ -227,6 +327,7 @@ export default function App() {
           return {
             ...r,
             unitsCollected: Math.min(r.unitsNeeded, r.unitsCollected + 1),
+            status: r.unitsCollected + 1 >= r.unitsNeeded ? 'FULFILLED' : r.status,
             responders: [newResponder, ...r.responders],
           };
         }
@@ -234,23 +335,29 @@ export default function App() {
       })
     );
 
+    pledgeBloodRequestUnitInFirestore(requestId).catch(() => {});
     addAuditLog('RESPOND_SOS', `Volunteer ${responderName} (${group}) responded to request ${requestId}`);
   };
 
   // New Donor Registration
-  const handleRegisterDonor = (newDonor: Donor) => {
-    setDonors((prev) => [newDonor, ...prev]);
-    setActiveTab('search');
-  };
+  const handleRegisterDonor = useCallback((newDonor: Donor) => {
+    setDonors((prev) => {
+      const filtered = prev.filter((d) => d.id !== newDonor.id);
+      return [newDonor, ...filtered];
+    });
+  }, []);
 
   // Urgent active requests count
-  const urgentRequests = requests.filter((r) => r.status === 'ACTIVE' && r.urgency === 'CRITICAL');
+  const urgentRequests = useMemo(
+    () => requests.filter((r) => r.status === 'ACTIVE' && r.urgency === 'CRITICAL'),
+    [requests]
+  );
 
   // =========================================================================
   // MOBILE APK INNER APP SCREEN (Authentic mobile experience matching PDF)
   // =========================================================================
   const renderMobileAPK = () => (
-    <div className={`w-full h-full flex flex-col transition-colors ${
+    <div className={`@container w-full h-full flex flex-col transition-colors ${
       darkMode ? 'bg-[#0b0f19] text-[#f8fafc]' : 'bg-[#f8fafc] text-[#0f172a]'
     }`}>
       {/* 1. Mobile App Top Bar with Status Bar & App Header */}
@@ -263,24 +370,30 @@ export default function App() {
         setDarkMode={setDarkMode}
         onOpenSOSModal={() => setIsSOSWizardOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenRegisterModal={(role) => openRegisterWithRole(role || 'USER')}
         onOpenFamilyModal={() => setIsFamilyModalOpen(true)}
         onOpenArchitectureModal={() => setIsArchitectureModalOpen(true)}
         onOpenSlideDeck={() => setDisplayMode('deck')}
+        onOpenPlayStoreModal={() => setIsPlayStoreModalOpen(true)}
       />
 
       {/* 2. Scrollable App Body (Render Active Screen from PDF) */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden app-scroll-smooth p-3.5 sm:p-4 space-y-4">
         {/* Tab: Home (Dashboard matching Page 1 & 5) */}
         {activeTab === 'home' && (
           <DonorHomeView
             requests={requests}
             lang={lang}
             onOpenSOSWizard={() => setIsSOSWizardOpen(true)}
-            onOpenRegister={() => setIsRegisterModalOpen(true)}
+            onOpenRegister={(role) => openRegisterWithRole(role || 'USER')}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}
             onSelectRequest={(req) => setActiveTab('requests')}
             onQuickDonate={(req) => setActiveTab('requests')}
             onNavigateTab={(tab) => setActiveTab(tab)}
+            onOpenDirectory={() => setIsDirectoryModalOpen(true)}
+            onOpenPoster={() => setIsPosterModalOpen(true)}
+            onOpenThalassemia={() => setIsThalassemiaModalOpen(true)}
+            onOpenPlayStore={() => setIsPlayStoreModalOpen(true)}
           />
         )}
 
@@ -318,12 +431,15 @@ export default function App() {
           />
         )}
 
-        {/* Tab: Messages / Inbox & Peer-to-Peer Donor-Recipient Chat */}
+        {/* Tab: Messages / Inbox & Real-Time WhatsApp-Style User-to-User Chat */}
         {activeTab === 'chat' && (
           <DonorChatView
             lang={lang}
+            donors={donors}
             initialDonor={activeDonorForChat}
             onClearInitialDonor={() => setActiveDonorForChat(null)}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            onOpenRegister={() => openRegisterWithRole('USER')}
           />
         )}
 
@@ -336,7 +452,8 @@ export default function App() {
         {activeTab === 'profile' && (
           <DonorProfileView
             lang={lang}
-            onOpenRegister={() => setIsRegisterModalOpen(true)}
+            onOpenRegister={(role) => openRegisterWithRole(role || 'USER')}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
           />
         )}
 
@@ -381,6 +498,8 @@ export default function App() {
             auditLogs={auditLogs}
             onLogAudit={addAuditLog}
             onExitAdmin={() => setActiveTab('home')}
+            onOpenRegisterWithRole={(role) => openRegisterWithRole(role)}
+            onOpenApkGuide={() => setIsPlayStoreModalOpen(true)}
           />
         )}
 
@@ -475,25 +594,63 @@ export default function App() {
             </button>
           </div>
 
-          {/* Right Tools: Login Button, Phone Frame Toggle, Language, Theme */}
+          {/* Right Tools: APK Install, ID Register, Login Button, Admin Panel, Frame Toggle, Language, Theme */}
           <div className="flex items-center gap-2">
-            {/* Prominent Login Trigger */}
+            {/* Direct APK & Anti-Hack Hub Button */}
             <button
-              onClick={() => setIsAuthModalOpen(true)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+              onClick={() => setIsPlayStoreModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-black dark:bg-slate-800 text-emerald-400 border border-slate-700 font-bold text-xs shadow-xs cursor-pointer whitespace-nowrap"
+              title="APK ডাউনলোড, ডিপ্লয় ও অ্যান্টি-হ্যাক গাইড"
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>{lang === 'bn' ? 'লগইন' : 'Login'}</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'APK ও সিকিউরিটি' : 'APK & Security'}</span>
             </button>
 
-            {/* Admin Panel Access Button (PIN Gated) */}
+            {/* Prominent ID Register Trigger (User / Admin) */}
+            <button
+              onClick={() => openRegisterWithRole('USER')}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'আইডি রেজিস্টার' : 'Register ID'}</span>
+            </button>
+
+            {/* Prominent Login / Account Trigger */}
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>
+                {liveFirebaseUser
+                  ? liveFirebaseUser.email?.split('@')[0] || liveFirebaseUser.phoneNumber || (lang === 'bn' ? 'অ্যাকাউন্ট' : 'Account')
+                  : lang === 'bn'
+                  ? 'লগইন'
+                  : 'Login'}
+              </span>
+            </button>
+
+            {liveFirebaseUser && (
+              <button
+                onClick={() => {
+                  signOutReal().catch(() => {});
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 font-bold text-xs cursor-pointer whitespace-nowrap"
+                title="লগআউট"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'লগআউট' : 'Logout'}</span>
+              </button>
+            )}
+
+            {/* Admin Panel Access Button */}
             <button
               onClick={() => setActiveTab('admin')}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-black dark:bg-slate-800 text-white font-bold text-xs shadow-xs cursor-pointer border border-slate-700"
-              title={lang === 'bn' ? 'অ্যাডমিন প্যানেল (মাস্টার পিন আবশ্যক)' : 'Admin Panel (PIN Protected)'}
+              title={lang === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Panel'}
             >
               <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-              <span>{lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}</span>
+              <span>{lang === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Panel'}</span>
             </button>
 
             {/* Frame / Frameless switcher when in APK mode on desktop */}
@@ -658,8 +815,10 @@ export default function App() {
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
         lang={lang}
+        initialRole={registerInitialRole}
         onRegisterDonor={handleRegisterDonor}
         onLogAudit={addAuditLog}
+        onNavigateTab={(tab) => setActiveTab(tab)}
       />
 
       <AuthModuleModal
@@ -667,6 +826,7 @@ export default function App() {
         onClose={() => setIsAuthModalOpen(false)}
         lang={lang}
         onLogAudit={addAuditLog}
+        onOpenRegister={() => openRegisterWithRole('USER')}
       />
 
       <FamilyVolunteerModal
@@ -676,6 +836,35 @@ export default function App() {
         onOpenSOSWithGroup={(group) => {
           setIsSOSWizardOpen(true);
         }}
+      />
+
+      <EmergencyDirectoryModal
+        isOpen={isDirectoryModalOpen}
+        onClose={() => setIsDirectoryModalOpen(false)}
+        lang={lang}
+      />
+
+      <EmergencyPosterModal
+        isOpen={isPosterModalOpen}
+        onClose={() => setIsPosterModalOpen(false)}
+        lang={lang}
+      />
+
+      <ThalassemiaManagerModal
+        isOpen={isThalassemiaModalOpen}
+        onClose={() => setIsThalassemiaModalOpen(false)}
+        lang={lang}
+      />
+
+      <PlayStoreGuideModal
+        isOpen={isPlayStoreModalOpen}
+        onClose={() => setIsPlayStoreModalOpen(false)}
+        lang={lang}
+      />
+
+      <PwaInstallPrompt
+        lang={lang}
+        onOpenApkGuide={() => setIsPlayStoreModalOpen(true)}
       />
 
       {isArchitectureModalOpen && (

@@ -71,6 +71,8 @@ export interface Donor {
   avatar?: string;
   healthConditions?: HealthConditions;
   reliabilityScore?: number; // 0 - 100%
+  facebookUrl?: string;
+  whatsappPhone?: string;
 }
 
 export interface AuditLogEntry {
@@ -104,6 +106,9 @@ export interface Conversation {
   unreadCount: number;
   online: boolean;
   messages: ChatMessage[];
+  facebookUrl?: string;
+  whatsappPhone?: string;
+  participantPhone?: string;
 }
 
 export interface BadgeItem {
@@ -165,6 +170,8 @@ export interface UserAccount {
   totalDonations: number;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
+  facebookUrl?: string;
+  whatsappPhone?: string;
   createdAt: string;
 }
 

@@ -56,7 +56,21 @@
   box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.35);
 }
 
-/* Crisp Clean Scrollbars */
+/* Crisp Clean Scrollbars & Smooth GPU Scrolling */
+.app-scroll-smooth {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scroll-behavior: smooth;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -74,3 +88,4 @@
 .dark ::-webkit-scrollbar-thumb {
   background: #475569;
 }
+
